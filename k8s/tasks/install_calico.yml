@@ -1,0 +1,19 @@
+- name: Modify calico yml config.
+  shell: |
+    sed -i "s#POD_CIDR#{{ pod_ip }}#g" calico.yaml 
+
+    kubectl apply -f calico.yaml 
+  args:
+    chdir: '/root/k8s-ha-install/calico/'
+  become: true
+  when: inventory_hostname == 'k8s-master01' 
+
+- name: Check Calico pods status.
+  debug:
+    msg: "请手动检查Calico创建pod的状态: `kubectl get po -n kube-system` "
+  run_once: true
+
+- name: Pause 180s to wait check.
+  pause:
+    seconds: 180
+

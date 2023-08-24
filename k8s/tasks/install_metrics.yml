@@ -1,0 +1,8 @@
+- name: Install Metrics server.
+  shell: |
+    kubectl create -f ./
+  args:
+    chdir: '/root/k8s-ha-install/metrics-server'
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+  tags: '31'

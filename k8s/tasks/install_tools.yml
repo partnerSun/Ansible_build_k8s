@@ -1,0 +1,124 @@
+- name: Download CentOS-Base.repo from Aliyun mirrors
+  get_url:
+    url: https://mirrors.aliyun.com/repo/Centos-7.repo
+    dest: /etc/yum.repos.d/CentOS-Base.repo
+
+- name: Install required packages
+  yum:
+    name: 
+      - yum-utils
+      - device-mapper-persistent-data
+      - lvm2
+      - git
+      - wget
+      - psmisc
+      - vim
+      - net-tools
+      - telnet
+      - http://mirrors.wlnmp.com/centos/wlnmp-release-centos.noarch.rpm
+      - ntpdate
+      - sshpass
+    state: present
+  become: true
+  ignore_errors: yes
+
+- name: Add Docker CE repository
+  #shell: "yum-config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+  get_url:
+    url: https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+ 
+
+- name: Remove specific lines from CentOS-Base.repo
+  shell: "sed -i -e '/mirrors.cloud.aliyuncs.com/d' -e '/mirrors.aliyuncs.com/d' /etc/yum.repos.d/CentOS-Base.repo"
+
+- name: Disable and stop firewalld dnsmasq networkmanager
+  systemd:
+    name: "{{ item }}"
+    enabled: no
+    state: stopped
+  loop: "{{ stop_service }}"
+  ignore_errors: yes
+
+- name: Set SELinux to permissive mode
+  command: setenforce 0
+  become: true
+  ignore_errors: yes  # Ignore errors if setenforce returns non-zero status
+
+- name: Close Selinux
+  shell: |
+    sed -i 's#SELINUX=enforcing#SELINUX=disabled#g' /etc/sysconfig/selinux
+    sed -i 's#SELINUX=enforcing#SELINUX=disabled#g' /etc/selinux/config
+  become: true
+
+- name: Close Swap Partition && Disalbe Swap fstab
+  shell: |
+    swapoff -a && sysctl -w vm.swappiness=0
+    sed -ri '/^[^#]*swap/s@^@#@' /etc/fstab
+  become: true
+  ignore_errors: yes  # Ignore errors if setenforce returns non-zero status
+
+
+- name: Config ntpdate service
+  shell: |
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+    echo 'Asia/Shanghai' >/etc/timezone
+    ntpdate time2.aliyun.com
+    echo '*/5 * * * * root /usr/sbin/ntpdate time2.aliyun.com' >>/etc/crontab
+    ulimit -SHn 65535 #config limit
+
+- name: Config limit
+  ansible.builtin.lineinfile:
+    dest: /etc/security/limits.conf
+    line: "{{ item }}"
+    state: present
+  loop: "{{ config_limit_vars }}"
+
+
+- name: Genertate k8s-master01 ssh keys
+  shell: |
+    ssh-keygen -f /root/.ssh/id_rsa -N ""
+  become: true
+  become_user: root
+  #run_once: true
+  #delegate_to: k8s-master01
+  when: inventory_hostname == 'k8s-master01'
+  tags: test1
+- name: Fetch public key from master01
+  fetch:
+    src: /root/.ssh/id_rsa.pub
+    dest: /tmp/ #会fetch到/tmp/k8s-master01/root/.ssh/id_rsa.pub
+    flat: yes
+    #delegate_to: k8s-master01 #从此节点fetch到控制节点的/tmp下
+  when: inventory_hostname == 'k8s-master01'
+  become: true
+  tags: test2
+
+- name: Copy k8s-master01 ssh keys to other nodes
+  authorized_key: #配置ssh公钥
+    user: root #分发到root用户下的authorized_keys中
+    key: "{{ lookup('file', '/tmp/id_rsa.pub') }}" #指定公钥文件位置
+  become: true
+  tags: test3
+  #  delegate_to: k8s-master01 #配合此参数不生效
+
+- name: Git clone install dir 
+  ansible.builtin.git:
+    repo: https://gitee.com/dukuan/k8s-ha-install.git
+    dest: /root/k8s-ha-install
+  become: true
+  when: inventory_hostname == 'k8s-master01' #只在master01上clone
+  ignore_errors: yes
+
+- name: Yum update without kernel
+  yum: 
+    name: '*'
+    state: latest
+    exclude: kernel*
+  become: true
+
+- name: Reboot and wait timeout 120s
+  reboot:
+    reboot_timeout: 120 
+  become: true
+  

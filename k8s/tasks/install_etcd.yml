@@ -1,0 +1,48 @@
+- name: Download etcd offline packages
+  get_url:
+    url: "{{ item.key }}"
+    dest: "{{ item.value }}"
+  become: true
+  with_dict: "{{ install_k8s_etcd_packages }}"
+  when: inventory_hostname == 'k8s-master01'
+  tags: 'download01'
+
+- name: Unzip packages
+  shell: |
+    cd /usr/local/
+    tar -xf kubernetes-server-linux-amd64.tar.gz  --strip-components=3 -C /usr/local/bin kubernetes/server/bin/kube{let,ctl,-apiserver,-controller-manager,-scheduler,-proxy} #k8s
+    tar -zxvf etcd-v3.5.7-linux-amd64.tar.gz --strip-components=1 -C /usr/local/bin etcd-v3.5.7-linux-amd64/etcd{,ctl} #etcd
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+  #connection: local
+  #
+- name: Master nodes install all k8s service.
+  synchronize:
+    src: "/usr/local/bin/"
+    dest: "/usr/local/bin/"
+    times: no
+    perms: no
+    rsync_opts:
+      - "--exclude=cfssl*"
+  become: true
+  when: inventory_hostname in groups['master']
+  delegate_to: k8s-master01
+
+- name: Worker nodes install all k8s service.
+  synchronize:
+    src: "/usr/local/bin/"
+    dest: "/usr/local/bin/"
+    rsync_opts:
+      - "--include=kubelet"
+      - "--include=kube-proxy"
+      - "--exclude=*"
+  become: true
+  when: inventory_hostname in groups['node']
+  delegate_to: k8s-master01
+
+- name: Checkout branch
+  shell: |
+    cd /root/k8s-ha-install
+    git checkout manual-installation-v1.27.x
+  become: true
+  when: inventory_hostname == 'k8s-master01'

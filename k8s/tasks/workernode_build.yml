@@ -1,0 +1,120 @@
+- name: Sync certs file to Woker nodes.
+  synchronize:
+    src: '/etc/kubernetes/'
+    dest: '/etc/kubernetes/'
+    rsync_opts:
+      - "--include=pki/ca.pem"
+      - "--include=pki/ca-key.pem"
+      - "--include=pki/front-proxy-ca.pem"
+      - "--include=bootstrap-kubelet.kubeconfig"
+      - "--exclude=*"
+  become: true
+  delegate_to: 'k8s-master01'
+  when: inventory_hostname != 'k8s-master01'
+
+- name: Create dir
+  shell: "mkdir -p /var/lib/kubelet /var/log/kubernetes /etc/systemd/system/kubelet.service.d /etc/kubernetes/manifests/"
+  become: true
+
+- name: Copy kubelet service file.
+  copy:
+    src: 'files/kubelet.service'
+    dest: '/usr/lib/systemd/system/kubelet.service'
+  become: true
+
+- name: Copy kubelet sevice conf file.
+  copy:
+    src: 'files/10-kubelet.conf'
+    dest: '/etc/systemd/system/kubelet.service.d/10-kubelet.conf'
+  become: true
+
+- name: Modify service_ip value.
+  set_fact:
+    modified_service_ip10: "{{ service_ip | regex_replace('1$', '10') }}"
+  run_once: true
+  tags: 'test22'
+- name: Template and sync kubelet conf file.
+  template:
+    src: 'kubelet-conf.yml.j2'
+    dest: '/etc/kubernetes/kubelet-conf.yml'
+  become: true
+ 
+- name: Startup kubelet systemd service.
+  systemd:
+    enabled: true
+    daemon_reload: true
+    state: restarted
+    name: kubelet
+  become: true
+
+- name: Check Cluster nodes
+  debug:
+    msg: "请运行以下命令手动检查集群节点:`kubectl get node`"
+  run_once: true
+
+- name: Pause for 300 seconds wait for Check cluster status.
+  pause:
+    seconds: 180
+    
+- name: Generate kube-proxy certs.
+  shell: |
+    cfssl gencert -ca=/etc/kubernetes/pki/ca.pem \
+        -ca-key=/etc/kubernetes/pki/ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes kube-proxy-csr.json | cfssljson -bare /etc/kubernetes/pki/kube-proxy
+    
+    kubectl config set-cluster kubernetes \
+        --certificate-authority=/etc/kubernetes/pki/ca.pem \
+        --embed-certs=true \
+        --server=https://{{ lb_hosts_to_add.keys()|first }}:8443 \
+        --kubeconfig=/etc/kubernetes/kube-proxy.kubeconfig
+        
+    kubectl config set-credentials system:kube-proxy \
+        --client-certificate=/etc/kubernetes/pki/kube-proxy.pem \
+        --client-key=/etc/kubernetes/pki/kube-proxy-key.pem \
+        --embed-certs=true \
+        --kubeconfig=/etc/kubernetes/kube-proxy.kubeconfig
+    
+    kubectl config set-context system:kube-proxy@kubernetes \
+        --cluster=kubernetes \
+        --user=system:kube-proxy \
+        --kubeconfig=/etc/kubernetes/kube-proxy.kubeconfig
+       
+    kubectl config use-context system:kube-proxy@kubernetes \
+        --kubeconfig=/etc/kubernetes/kube-proxy.kubeconfig
+  args:
+    chdir: '/root/k8s-ha-install/pki'
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+- name: Sync kube-proxy .config and certs to other nodes.
+  synchronize:
+    src: '/etc/kubernetes/'
+    dest: '/etc/kubernetes/'
+    rsync_opts:
+      - "--include=kube-proxy.kubeconfig"
+      - "--exclude=*"
+  become: true
+  delegate_to: 'k8s-master01'
+  when: inventory_hostname != 'k8s-master01'
+  
+- name: Sync kube-proxy .config and certs files to other nodes.
+  copy:
+    src: 'files/kube-proxy.service'
+    dest: '/usr/lib/systemd/system/kube-proxy.service'
+  become: true
+  
+- name: Template and Sync kube-proxy yml config .
+  template:
+    src: 'kube-proxy.yaml.j2'
+    dest: '/etc/kubernetes/kube-proxy.yaml'
+  become: true
+
+- name: Startup kube-proxy services.
+  systemd:
+    name: kube-proxy
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  become: true
+  tags: 'test23'

@@ -1,0 +1,5 @@
+- name: Deploy Install The Binary Kubernetes Cluster
+  hosts: all
+  #  gather_facts: false 
+  roles:
+    - role: k8s

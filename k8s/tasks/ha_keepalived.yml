@@ -1,0 +1,42 @@
+- name: Install keepalived and haproxy
+  yum:
+    pkg:
+      - keepalived
+      - haproxy
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Config Template
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Config Template
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: test13
+
+- name: Copy keepalived health check scripts
+  copy:
+    src: "files/check_apiserver.sh"
+    dest: "/etc/keepalived/check_apiserver.sh"
+    mode: 0755
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: test14
+
+- name: Startup haproxy and keepalived service
+  systemd:
+    state: restarted
+    daemon_reload: true
+    name: "{{ item }}"
+    enabled: true
+  loop: "{{ ha_keepalived }}"
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: test15

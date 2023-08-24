@@ -1,0 +1,21 @@
+- name: Add Cluster master's hostname and ip to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.key }} {{ item.value }}"
+    state: present
+  with_dict: "{{ master_hostsip }}"
+
+- name: Add Cluster nodes's hostname and ip to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.key }} {{ item.value }}"
+    state: present
+  with_dict: "{{ node_hostsip }}"
+
+- name: Add loadbalance ip and host to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.key }} {{ item.value }}"
+    state: present
+  with_dict: "{{ lb_hosts_to_add }}"
+  tags: test0

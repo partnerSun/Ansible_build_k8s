@@ -1,0 +1,100 @@
+- name: Template of Etcd
+  template:
+    src: etcd.config.yml.j2
+    dest: /etc/etcd/etcd.config.yml
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: test16
+
+- name: Copy etcd service config
+  copy:
+    src: 'files/etcd.service'
+    dest: '/usr/lib/systemd/system/etcd.service'
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: test17
+
+  #- name: Create etcd cert dir
+  #  file:
+  #    path: /etc/kubernetes/pki/etcd
+  #    state: directory
+  #  become: true
+  #  when: inventory_hostname in groups['master']
+
+- name: Link the etcd cert dir
+  file:
+    src: /etc/etcd/ssl
+    dest: /etc/kubernetes/pki/etcd
+    state: link
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Startup etcd service
+  systemd:
+    name: etcd
+    state: restarted
+    enabled: true
+    daemon_reload: true
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Modify service_ip value
+  set_fact:
+    modified_service_ip: "{{ service_ip | regex_replace('1$', '0') }}"
+  tags: "test18"
+  run_once: true
+
+  #- name: print modified_service_ip
+  #  debug:
+  #    var: modified_service_ip
+  #  tags: "test19"
+  #  run_once: true
+
+- name: Template and sync apiserver config
+  template:
+    src: kube-apiserver.service.j2
+    dest: /usr/lib/systemd/system/kube-apiserver.service
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: 'test20'
+
+- name: Startup apiserver systemd
+  systemd:
+    name: kube-apiserver
+    enabled: true
+    daemon_reload: true
+    state: restarted
+  become: true
+  when: inventory_hostname in groups['master']
+  tags: 'test21'
+- name: Template and sync kube-controller-manager config
+  template:
+    src: kube-controller-manager.service.j2
+    dest: /usr/lib/systemd/system/kube-controller-manager.service
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Startup kube-controller-manager systemd
+  systemd:
+    name: kube-controller-manager
+    enabled: true
+    daemon_reload: true
+    state: restarted
+  become: true
+  when: inventory_hostname in groups['master']
+- name: Sync kube-scheduler config
+  copy:
+    src: files/kube-scheduler.service
+    dest: /usr/lib/systemd/system/kube-scheduler.service
+  become: true
+  when: inventory_hostname in groups['master']
+
+- name: Startup kube-scheduler systemd
+  systemd:
+    name: kube-scheduler
+    enabled: true
+    daemon_reload: true
+    state: restarted
+  become: true
+  when: inventory_hostname in groups['master']
+

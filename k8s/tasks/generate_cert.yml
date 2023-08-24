@@ -1,0 +1,251 @@
+- name: Copy Cert Tools
+  copy:
+    src: "{{ item.key }}"
+    dest: "{{ item.value }}"
+  with_dict: "{{ cert_tools }}"
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+- name: Tools chmod+x
+  file:
+    path: "{{ item.value }}"
+    mode: 0755
+  with_dict: "{{ cert_tools }}"
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+- name: Create etcd cert dir on Master .
+  file:
+    path: /etc/etcd/ssl
+    state: directory
+  when: inventory_hostname in groups['master']
+  become: true
+
+- name: Create k8s dir on all nodes.
+  file:
+    path: /etc/kubernetes/pki
+    state: directory
+  become: true
+
+ #以下用于转化etcd的主机名和ip，转换为生成证书命令行所需的格式
+- name: Get etcd ip
+  set_fact:
+    etcd_ip: "{{ etcd_hostsip.keys() | list }}"
+  run_once: true
+
+- name: Convert etcd ip
+  set_fact:
+    etcd_ip_line: "{{ etcd_ip | join(',') }}"
+  run_once: true
+
+- name: Get etcd hostname
+  set_fact:
+    etcd_hostname: "{{ etcd_hostsip.values() | list }}"
+  run_once: true
+
+- name: Convert etcd hostname
+  set_fact:
+    etcd_hostname_line: "{{ etcd_hostname | join(',') }}"
+  run_once: true
+
+#生成etcd证书
+- name: Generate Etcd Cert on master01
+  shell: |
+    cfssl gencert -initca etcd-ca-csr.json | cfssljson -bare /etc/etcd/ssl/etcd-ca
+    
+    cfssl gencert -ca=/etc/etcd/ssl/etcd-ca.pem -ca-key=/etc/etcd/ssl/etcd-ca-key.pem -config=ca-config.json -hostname=127.0.0.1,{{ etcd_hostname_line }},{{ etcd_ip_line }} \
+        -profile=kubernetes etcd-csr.json | cfssljson -bare /etc/etcd/ssl/etcd
+  args:
+    chdir: /root/k8s-ha-install/pki
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+ #同步etcd证书
+- name: Synchronize Etcd Cert to other Master.
+  synchronize:
+    src: "/etc/etcd/ssl/"
+    dest: "/etc/etcd/ssl/"
+    rsync_opts:
+      - "--include=etcd-ca-key.pem"
+      - "--include=etcd-key.pem"
+      - "--include=etcd.pem"
+      - "--exclude=*"
+  #限制 只复制到master节点
+  when: inventory_hostname in groups['master-other']
+  #在master01节点上操作
+  delegate_to: 'k8s-master01'
+  become: true 
+
+#转化vip
+- name: Get loadbalance node ip(vip)
+  set_fact:
+    lb_host_ip: "{{ lb_hosts_to_add.keys() | first }}"
+  run_once: true
+
+#转化master节点的ip
+- name: Get mater ip
+  set_fact:
+    master_ip: "{{ master_hostsip.keys() | list }}"
+  run_once: true
+
+- name: Convert a newline character
+  set_fact:
+    master_ip_line: "{{ master_ip | join(',') }}"
+  run_once: true
+
+    ##转化service的ip
+    #- name: Convert service_ip
+    #  set_fact:
+    #    service_ip0: "{{ service_ip.0 }}"
+    #
+#生成k8s集群所需的证书
+- name: Generate kubernetes Cert on master01
+  shell: | 
+    cfssl gencert -initca ca-csr.json | cfssljson -bare /etc/kubernetes/pki/ca
+    
+    cfssl gencert   -ca=/etc/kubernetes/pki/ca.pem  \
+        -ca-key=/etc/kubernetes/pki/ca-key.pem -config=ca-config.json \
+        -hostname={{ service_ip }},{{ lb_host_ip }},127.0.0.1,kubernetes,kubernetes.default,kubernetes.default.svc,kubernetes.default.svc.cluster,kubernetes.default.svc.cluster.local,{{ master_ip_line }} \
+        -profile=kubernetes apiserver-csr.json | cfssljson -bare /etc/kubernetes/pki/apiserver
+  args:
+    chdir: /root/k8s-ha-install/pki
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+- name: Generate Apiserver Cert on master01
+  shell: | 
+    cfssl gencert -initca front-proxy-ca-csr.json | cfssljson -bare /etc/kubernetes/pki/front-proxy-ca 
+    
+    cfssl gencert -ca=/etc/kubernetes/pki/front-proxy-ca.pem \
+        -ca-key=/etc/kubernetes/pki/front-proxy-ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes front-proxy-client-csr.json | cfssljson -bare /etc/kubernetes/pki/front-proxy-client
+  args:
+    chdir: /root/k8s-ha-install/pki
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+  
+- name: Generate Controller Cert on master01
+  shell: |
+    cfssl gencert -ca=/etc/kubernetes/pki/ca.pem \
+        -ca-key=/etc/kubernetes/pki/ca-key.pem -config=ca-config.json \
+        -profile=kubernetes manager-csr.json | cfssljson -bare /etc/kubernetes/pki/controller-manager
+    
+    # 注意，如果不是高可用集群，192.168.1.160:8443改为master01的地址，8443改为apiserver的端口，默认是6443
+    # set-cluster：设置一个集群项，
+    kubectl config set-cluster kubernetes --certificate-authority=/etc/kubernetes/pki/ca.pem \
+        --embed-certs=true \
+        --server=https://{{ lb_host_ip }}:8443 \
+        --kubeconfig=/etc/kubernetes/controller-manager.kubeconfig
+    
+    # 设置一个环境项，一个上下文
+    kubectl config set-context system:kube-controller-manager@kubernetes \
+        --cluster=kubernetes \
+        --user=system:kube-controller-manager \
+        --kubeconfig=/etc/kubernetes/controller-manager.kubeconfig
+    
+    # set-credentials 设置一个用户项    
+    kubectl config set-credentials system:kube-controller-manager \
+        --client-certificate=/etc/kubernetes/pki/controller-manager.pem \
+        --client-key=/etc/kubernetes/pki/controller-manager-key.pem \
+        --embed-certs=true \
+        --kubeconfig=/etc/kubernetes/controller-manager.kubeconfig
+    
+    
+    # 使用某个环境当做默认环境    
+    kubectl config use-context system:kube-controller-manager@kubernetes --kubeconfig=/etc/kubernetes/controller-manager.kubeconfig
+         
+    cfssl gencert -ca=/etc/kubernetes/pki/ca.pem \
+        -ca-key=/etc/kubernetes/pki/ca-key.pem \
+        -config=ca-config.json \
+        -profile=kubernetes scheduler-csr.json | cfssljson -bare /etc/kubernetes/pki/scheduler
+    
+    # 注意，如果不是高可用集群，192.168.1.160:8443改为master01的地址，8443改为apiserver的端口，默认是6443    
+    kubectl config set-cluster kubernetes \
+        --certificate-authority=/etc/kubernetes/pki/ca.pem \
+        --embed-certs=true \
+        --server=https://{{ lb_host_ip }}:8443 \
+        --kubeconfig=/etc/kubernetes/scheduler.kubeconfig
+        
+    kubectl config set-credentials system:kube-scheduler \
+        --client-certificate=/etc/kubernetes/pki/scheduler.pem \
+        --client-key=/etc/kubernetes/pki/scheduler-key.pem \
+        --embed-certs=true \
+        --kubeconfig=/etc/kubernetes/scheduler.kubeconfig
+    
+    kubectl config set-context system:kube-scheduler@kubernetes \
+        --cluster=kubernetes \
+        --user=system:kube-scheduler \
+        --kubeconfig=/etc/kubernetes/scheduler.kubeconfig
+       
+    kubectl config use-context system:kube-scheduler@kubernetes --kubeconfig=/etc/kubernetes/scheduler.kubeconfig
+        
+    cfssl gencert -ca=/etc/kubernetes/pki/ca.pem \
+       -ca-key=/etc/kubernetes/pki/ca-key.pem \
+       -config=ca-config.json \
+       -profile=kubernetes admin-csr.json | cfssljson -bare /etc/kubernetes/pki/admin
+    
+    # 注意，如果不是高可用集群，192.168.1.160:8443改为master01的地址，8443改为apiserver的端口，默认是6443
+    kubectl config set-cluster kubernetes --certificate-authority=/etc/kubernetes/pki/ca.pem --embed-certs=true --server=https://{{ lb_host_ip }}:8443 --kubeconfig=/etc/kubernetes/admin.kubeconfig
+    
+    kubectl config set-credentials kubernetes-admin \
+       --client-certificate=/etc/kubernetes/pki/admin.pem \
+       --client-key=/etc/kubernetes/pki/admin-key.pem \
+       --embed-certs=true --kubeconfig=/etc/kubernetes/admin.kubeconfig  
+    
+    kubectl config set-context kubernetes-admin@kubernetes --cluster=kubernetes --user=kubernetes-admin --kubeconfig=/etc/kubernetes/admin.kubeconfig
+   
+    kubectl config use-context kubernetes-admin@kubernetes --kubeconfig=/etc/kubernetes/admin.kubeconfig 
+    
+  args:
+    chdir: /root/k8s-ha-install/pki
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+
+- name: Create ServiceAccount Key secret
+  shell: |
+    openssl genrsa -out /etc/kubernetes/pki/sa.key 2048   
+    
+    openssl rsa -in /etc/kubernetes/pki/sa.key -pubout -out /etc/kubernetes/pki/sa.pub
+  args:
+    chdir: /root/k8s-ha-install/pki
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+  
+- name: Statistics the number of certificates on master01, should be 23
+  shell: "ls ./"
+  register: cert_files
+  args:
+    chdir: /etc/kubernetes/pki/
+  when: inventory_hostname == 'k8s-master01'
+  failed_when: cert_files.stdout_lines|length != 23
+
+- name: Print filenames if there are 23 cert files
+  debug:
+    msg: "Certs: {{ cert_files.stdout_lines }}"
+  when: inventory_hostname == 'k8s-master01' #
+
+- name: Synchronize Cert files to other Master.
+  synchronize:
+    src: "/etc/kubernetes/pki/"
+    dest: "/etc/kubernetes/pki/"
+    rsync_opts:
+      - "--exclude=*etcd*"
+  when: inventory_hostname in groups['master-other']
+  delegate_to: 'k8s-master01'
+  become: true
+  tags: test11
+
+- name: Synchronize .kubeconfig files to other Master.
+  synchronize:
+    src: "/etc/kubernetes/"
+    dest: "/etc/kubernetes/"
+    rsync_opts:
+      - "--include=admin.kubeconfig"
+      - "--include=scheduler.kubeconfig"
+      - "--include=controller-manager.kubeconfig"
+      - "--exclude=*"
+  when: inventory_hostname in groups['master-other']
+  delegate_to: 'k8s-master01'
+  become: true
+  tags: test12

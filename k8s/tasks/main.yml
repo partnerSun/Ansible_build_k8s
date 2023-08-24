@@ -1,0 +1,17 @@
+---
+# tasks file for k8s
+#
+
+- include: updatehosts.yml
+- include: install_tools.yml
+- include: update_kernel.yml
+- include: install_basic_service.yml
+- include: install_etcd.yml
+- include: generate_cert.yml
+- include: ha_keepalived.yml
+- include: module_services.yml
+- include: tls_bootstrap.yml
+- include: workernode_build.yml
+- include: install_calico.yml
+- include: install_coredns.yml
+- include: install_metrics.yml

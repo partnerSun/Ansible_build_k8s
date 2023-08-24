@@ -1,0 +1,71 @@
+- name: Install containerd Runtime
+  yum:
+    pkg:
+      - docker-ce-20.10.*
+      - docker-ce-cli-20.10.*
+      - containerd.io
+  become: true
+
+- name: Config Containerd's modules
+  shell: |
+    cat <<EOF > /etc/modules-load.d/containerd.conf
+    overlay
+    br_netfilter
+    EOF
+    modprobe -- overlay
+    modprobe -- br_netfilter
+  become: true
+
+- name: Config Containerd's kernel
+  shell: | 
+    cat <<EOF > /etc/sysctl.d/99-kubernetes-cri.conf
+    net.bridge.bridge-nf-call-iptables = 1
+    net.ipv4.ip_forward = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    EOF
+
+    sysctl --system
+  become: true
+
+- name: Create Containerd config dir
+  file:
+    path: /etc/containerd
+    state: directory
+  become: true
+
+- name: Generate containerd config file
+  shell: |
+    containerd config default | tee /etc/containerd/config.toml
+  become: true
+
+- name: Modify Containerd config file:Cgroup
+  lineinfile:
+    path: /etc/containerd/config.toml
+    line: "            SystemdCgroup = true"
+    regexp: '^\s*SystemdCgroup = false'
+  become: true
+
+- name: Modify Containerd config file:sandbox_image
+  lineinfile:
+    path: /etc/containerd/config.toml
+    line: '    sandbox_image = "registry.cn-hangzhou.aliyuncs.com/google_containers/pause:3.7"'
+    regexp: '^\s*sandbox_image' #空格开头
+  become: true
+
+- name: Start Containerd service
+  systemd:
+    state: restarted
+    daemon_reload: yes
+    name: containerd
+    enabled: yes
+  become: true
+
+- name: Config crictl client runtime path
+  shell: |
+    cat > /etc/crictl.yaml <<EOF
+    runtime-endpoint: unix:///run/containerd/containerd.sock
+    image-endpoint: unix:///run/containerd/containerd.sock
+    timeout: 10
+    debug: false
+    EOF
+  become: true

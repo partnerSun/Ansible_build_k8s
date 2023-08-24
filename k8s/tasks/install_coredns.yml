@@ -1,0 +1,10 @@
+- name: Modify coredns config.yml.
+  shell: |
+    sed -i "s#KUBEDNS_SERVICE_IP#{{ modified_service_ip10 }}#g" CoreDNS/coredns.yaml
+
+    kubectl  create -f CoreDNS/coredns.yaml
+  args:
+    chdir: '/root/k8s-ha-install/'
+  become: true
+  tags: 'test30'
+  when: inventory_hostname == 'k8s-master01'

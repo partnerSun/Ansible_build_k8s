@@ -1,0 +1,11 @@
+- name: Create bootstrap on master01
+  shell: |
+    echo 'kubectl config set-cluster kubernetes --certificate-authority=/etc/kubernetes/pki/ca.pem \
+        --embed-certs=true --server=https://{{ lb_hosts_to_add.keys()|first }}:8443 \
+        --kubeconfig=/etc/kubernetes/bootstrap-kubelet.kubeconfig' >/tmp/123.txt
+
+  args:
+    chdir: /root/k8s-ha-install/bootstrap
+  become: true
+  when: inventory_hostname == 'k8s-master01'
+

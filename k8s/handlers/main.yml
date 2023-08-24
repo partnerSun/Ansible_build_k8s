@@ -1,0 +1,9 @@
+---
+# handlers file for k8s
+- name: Print kernel version
+  debug:
+    msg: "{{ c_kernel }}"
+- name: Reboot
+  reboot:
+    reboot_timeout: 300
+  become: true
