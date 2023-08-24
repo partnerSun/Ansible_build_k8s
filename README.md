@@ -14,5 +14,5 @@ ansible-playbook playbook.yml -i hosts
 * service, pod的ip在k8s/vars/main.yml中配置
 * etcd当前配置部署在3个master节点上，若需单独部署，需要修改etcd安装、配置和证书的部分
 * hosts文件配置要部署的资产节点和登录信息
-* 通过修改k8s/vars/main.yml变量文件
+* 通过修改k8s/vars/main.yml变量文件,包括主机名与ip映射等，这个文件中的变量部署之前最好都看一遍
 
