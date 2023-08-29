@@ -34,5 +34,5 @@ ansible-playbook playbook.yml -i hosts
 └── vars #定义该role的变量
 ```
 
-** 每个目录下都有一个main.yml文件作为该目录的入口文件(files目录除外)，可以添加其他的文件并通过include在main.yml中引用
+* 每个目录下都有一个main.yml文件作为该目录的入口文件(files目录除外)，可以添加其他的文件并通过include在main.yml中引用
 
