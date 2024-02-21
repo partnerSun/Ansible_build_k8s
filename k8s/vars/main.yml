@@ -41,8 +41,8 @@ stop_service:
 kernel_upgrade_packages:
         #"http://193.49.22.109/elrepo/kernel/el7/x86_64/RPMS/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm"
         #"http://193.49.22.109/elrepo/kernel/el7/x86_64/RPMS/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm"
-  "http://download.it.novaecs.com/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm"
-  "http://download.it.novaecs.com/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm"
+  "http://download.it.novaecs.com/k8s/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-devel-4.19.12-1.el7.elrepo.x86_64.rpm"
+  "http://download.it.novaecs.com/k8s/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm": "/root/kernel-ml-4.19.12-1.el7.elrepo.x86_64.rpm"
 config_ipvs_vars:
   -  "ip_vs"
   -  "ip_vs_lc"
@@ -69,8 +69,8 @@ config_ipvs_vars:
 install_k8s_etcd_packages:
         #"https://dl.k8s.io/v1.27.4/kubernetes-server-linux-amd64.tar.gz": "/usr/local/kubernetes-server-linux-amd64.tar.gz"
         #  "https://github.com/etcd-io/etcd/releases/download/v3.5.7/etcd-v3.5.7-linux-amd64.tar.gz": "/usr/local/etcd-v3.5.7-linux-amd64.tar.gz"
-  "http://download.it.novaecs.com/kubernetes-server-linux-amd64.tar.gz": "/usr/local/kubernetes-server-linux-amd64.tar.gz"
-  "http://download.it.novaecs.com/etcd-v3.5.7-linux-amd64.tar.gz": "/usr/local/etcd-v3.5.7-linux-amd64.tar.gz"
+  "http://download.it.novaecs.com/k8s/kubernetes-server-linux-amd64.tar.gz": "/usr/local/kubernetes-server-linux-amd64.tar.gz"
+  "http://download.it.novaecs.com/k8s/etcd-v3.5.7-linux-amd64.tar.gz": "/usr/local/etcd-v3.5.7-linux-amd64.tar.gz"
 
 cert_tools:
   "files/cfssl_linux-amd64": "/usr/local/bin/cfssl"
