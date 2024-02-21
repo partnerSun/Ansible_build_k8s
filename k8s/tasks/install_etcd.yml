@@ -1,7 +1,10 @@
 - name: Download etcd offline packages
-  get_url:
+  uri:
     url: "{{ item.key }}"
     dest: "{{ item.value }}"
+    method: GET
+    user: admin
+    password: admin123456
   become: true
   with_dict: "{{ install_k8s_etcd_packages }}"
   when: inventory_hostname == 'k8s-master01'
