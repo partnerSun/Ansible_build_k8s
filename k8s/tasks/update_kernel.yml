@@ -1,7 +1,11 @@
 - name: Download kernel upgrade packages on master01.
-  get_url:
+  uri:
     url: "{{ item.key }}"
     dest: "{{ item.value }}"
+    method: GET
+    user: admin
+    password: admin123456
+  become: true
   with_dict: "{{ kernel_upgrade_packages }}"
   when: inventory_hostname == 'k8s-master01'
 
