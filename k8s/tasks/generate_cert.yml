@@ -69,6 +69,7 @@
       - "--include=etcd-ca-key.pem"
       - "--include=etcd-key.pem"
       - "--include=etcd.pem"
+      - "--include=etcd-ca.pem"
       - "--exclude=*"
   #限制 只复制到master节点
   when: inventory_hostname in groups['master-other']
