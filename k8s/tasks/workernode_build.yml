@@ -11,12 +11,12 @@
 #带有子目录时 会与根目录下的文件冲突，拆开同步
 - name: Sync certs file to Woker nodes 02.
   synchronize:
-    src: '/etc/kubernetes/'
-    dest: '/etc/kubernetes/'
+    src: '/etc/kubernetes/pki/'
+    dest: '/etc/kubernetes/pki/'
     rsync_opts:
-      - "--include=pki/ca.pem"
-      - "--include=pki/ca-key.pem"
-      - "--include=pki/front-proxy-ca.pem"
+      - "--include=ca.pem"
+      - "--include=ca-key.pem"
+      - "--include=front-proxy-ca.pem"
       - "--exclude=*"
   become: true
   delegate_to: 'k8s-master01'
