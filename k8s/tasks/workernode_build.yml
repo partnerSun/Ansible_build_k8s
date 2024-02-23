@@ -1,4 +1,15 @@
-- name: Sync certs file to Woker nodes.
+- name: Sync certs file to Woker nodes 01.
+  synchronize:
+    src: '/etc/kubernetes/'
+    dest: '/etc/kubernetes/'
+    rsync_opts:
+      - "--include=bootstrap-kubelet.kubeconfig"
+      - "--exclude=*"
+  become: true
+  delegate_to: 'k8s-master01'
+  when: inventory_hostname != 'k8s-master01'
+#带有子目录时 会与根目录下的文件冲突，拆开同步
+- name: Sync certs file to Woker nodes 02.
   synchronize:
     src: '/etc/kubernetes/'
     dest: '/etc/kubernetes/'
@@ -6,12 +17,11 @@
       - "--include=pki/ca.pem"
       - "--include=pki/ca-key.pem"
       - "--include=pki/front-proxy-ca.pem"
-      - "--include=bootstrap-kubelet.kubeconfig"
       - "--exclude=*"
   become: true
   delegate_to: 'k8s-master01'
   when: inventory_hostname != 'k8s-master01'
-
+  
 - name: Create dir
   shell: "mkdir -p /var/lib/kubelet /var/log/kubernetes /etc/systemd/system/kubelet.service.d /etc/kubernetes/manifests/"
   become: true
